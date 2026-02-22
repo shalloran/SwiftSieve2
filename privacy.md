@@ -40,4 +40,4 @@ We may update this policy occasionally. The "Last updated" date at the top will 
 
 ## Contact
 
-For any questions or concerns about this policy or the app itself, please open an issue at the app's GitHub repository or contact the developer via the link in the App Store listing. If you send us an email, we will only store information you share with us directly for the amount of time required to help you or address your concerns. We will not use your personal information, other than to assist you, and we will never sell your personal information to any third parties.
+For any questions or concerns about this policy or the app itself, please open an issue at the app's GitHub repository or email **support@swiftsieve.com**. If you send us an email, we will only store information you share with us directly for the amount of time required to help you or address your concerns. We will not use your personal information, other than to assist you, and we will never sell your personal information to any third parties.

@@ -29,8 +29,11 @@ Pods/
 *.xcworkspace
 !default.xcworkspace
 
-# fastlane (if you use it later)
+# fastlane
 fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output/
+
+# personal
+/internal-docs/
