@@ -26,3 +26,5 @@ Open `SwiftSieveDNS.xcodeproj` in Xcode, set your team and App Group on both tar
 ---
 
 *The main contributor to this repo was a part-time developer of Lockdown Privacy, but this project is independent and not affiliated with Lockdown Privacy in any way. The AppStore App will always be compiled directly from this repository, and any changes will be noted here and linked to from the AppStore App changelog.*
+
+[Privacy policy](privacy.md)
