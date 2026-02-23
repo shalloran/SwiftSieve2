@@ -1,4 +1,4 @@
-# SwiftSieve DNS
+# [SwiftSieve DNS](https://swiftsieve.com)
 
 <img src="SwiftSieveDNS/Assets.xcassets/AppIcon.appiconset/AppIcon.png" width="96" height="96" align="left" style="margin-right: 1em;" />
 
@@ -25,7 +25,7 @@ Open `SwiftSieveDNS.xcodeproj` in Xcode, set your team and App Group on both tar
 
 ## support
 
-Please open a github issue in this repo, or send mail to [support@swiftsieve.com](mailto:support@swiftsieve.com), we'd love to collaborate or help!
+[swiftsieve.com](https://swiftsieve.com) · Open a github issue in this repo, or send mail to [support@swiftsieve.com](mailto:support@swiftsieve.com)—we'd love to collaborate or help!
 
 ---
 
