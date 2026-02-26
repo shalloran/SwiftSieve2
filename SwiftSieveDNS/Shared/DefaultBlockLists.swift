@@ -22,7 +22,29 @@ enum DefaultBlockLists {
         DefaultBlockList(id: "data_trackers", name: "Data Trackers", filename: "data_trackers", enabledByDefault: true),
         DefaultBlockList(id: "crypto_mining", name: "Crypto Mining", filename: "crypto_mining", enabledByDefault: false),
         DefaultBlockList(id: "marketing", name: "Marketing Trackers", filename: "marketing", enabledByDefault: true),
+        DefaultBlockList(id: "ub_easylist", name: "uBlock: EasyList domains", filename: "ub_easylist", enabledByDefault: false),
+        DefaultBlockList(id: "ub_easyprivacy", name: "uBlock: EasyPrivacy domains", filename: "ub_easyprivacy", enabledByDefault: false),
+        DefaultBlockList(id: "ub_ublock_ads", name: "uBlock: ads filters domains", filename: "ub_ublock_ads", enabledByDefault: false),
+        DefaultBlockList(id: "ub_ublock_privacy", name: "uBlock: privacy filters domains", filename: "ub_ublock_privacy", enabledByDefault: false),
+        DefaultBlockList(id: "ub_peter_lowe", name: "uBlock: peter lowe hosts", filename: "ub_peter_lowe", enabledByDefault: false),
+        DefaultBlockList(id: "ub_malicious_urlhaus", name: "uBlock: malicious urlhaus domains", filename: "ub_malicious_urlhaus", enabledByDefault: false),
     ]
+
+    /// ids for ublock-derived lists (no per-domain toggles)
+    static let uBlockIds: Set<String> = [
+        "ub_easylist",
+        "ub_easyprivacy",
+        "ub_ublock_ads",
+        "ub_ublock_privacy",
+        "ub_peter_lowe",
+        "ub_malicious_urlhaus",
+    ]
+
+    /// lists which support per-domain include/exclude in the ui
+    static let domainTogglableLists: [DefaultBlockList] = all.filter { !uBlockIds.contains($0.id) }
+
+    /// ublock-derived lists, toggled only at list level
+    static let uBlockLists: [DefaultBlockList] = all.filter { uBlockIds.contains($0.id) }
 
     private static var domainCache: [String: Set<String>] = [:]
     private static let cacheLock = NSLock()

@@ -18,6 +18,11 @@ final class DNSProxyController: ObservableObject {
     @Published private(set) var isEnabled: Bool = false
     @Published private(set) var statusDescription: String = "Not configured"
     @Published private(set) var isRepairing: Bool = false
+    /// true when save succeeded but system never enabled (timeout); user can tap "Reset and try again"
+    @Published private(set) var activationFailed: Bool = false
+    /// true when save failed with "permission denied" (TestFlight/App Store blocks DNS proxy creation)
+    @Published private(set) var isSavePermissionDenied: Bool = false
+    private var activationCheckTimer: DispatchSourceTimer?
 
     private init() {
         loadPreferences()
@@ -29,9 +34,14 @@ final class DNSProxyController: ObservableObject {
                 guard let self = self else { return }
                 if let error = error {
                     self.statusDescription = "Error: \(error.localizedDescription)"
+                    self.isSavePermissionDenied = false
                     return
                 }
+                self.isSavePermissionDenied = false
                 self.isEnabled = self.manager.isEnabled
+                if self.manager.isEnabled && self.manager.providerProtocol != nil {
+                    self.activationFailed = false
+                }
                 self.updateStatusDescription()
                 // if system may have marked config invalid, re-apply to repair
                 if self.configLooksInvalid() {
@@ -69,6 +79,86 @@ final class DNSProxyController: ObservableObject {
         }
     }
 
+    private func waitForSystemActivation(
+        maxWaitSeconds: TimeInterval = 15,
+        pollIntervalSeconds: TimeInterval = 1,
+        completion: (() -> Void)? = nil
+    ) {
+        activationCheckTimer?.cancel()
+
+        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
+        activationCheckTimer = timer
+
+        let deadline = Date().addingTimeInterval(maxWaitSeconds)
+        let onComplete = { DispatchQueue.main.async { completion?() } }
+
+        timer.setEventHandler { [weak self] in
+            guard let self = self else {
+                timer.cancel()
+                onComplete()
+                return
+            }
+
+            if Date() >= deadline {
+                timer.cancel()
+                DispatchQueue.main.async {
+                    self.isEnabled = self.manager.isEnabled
+                    self.updateStatusDescription()
+                    self.activationFailed = true
+                    self.statusDescription = "iOS didn't enable the DNS proxy. Tap 'Reset and try again' to request permission again."
+                    completion?()
+                }
+                return
+            }
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.manager.loadFromPreferences { [weak self] error in
+                    guard let self = self else { return }
+                    if let error = error {
+                        timer.cancel()
+                        DispatchQueue.main.async {
+                            self.statusDescription = "error checking status: \(error.localizedDescription)"
+                            completion?()
+                        }
+                        return
+                    }
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self = self else { return }
+                        let isNowEnabled = self.manager.isEnabled && self.manager.providerProtocol != nil
+                        if isNowEnabled {
+                            timer.cancel()
+                            self.isEnabled = true
+                            self.activationFailed = false
+                            self.updateStatusDescription()
+                            completion?()
+                        }
+                    }
+                }
+            }
+        }
+
+        timer.schedule(deadline: .now() + pollIntervalSeconds, repeating: pollIntervalSeconds)
+        timer.resume()
+    }
+
+    /// clear config then re-apply and save again so iOS may show the permission sheet again
+    func resetAndRetryActivation() {
+        activationFailed = false
+        isRepairing = true
+        manager.loadFromPreferences { [weak self] _ in
+            guard let self = self else { return }
+            self.manager.providerProtocol = nil
+            self.manager.isEnabled = false
+            self.manager.saveToPreferences { [weak self] _ in
+                guard let self = self else { return }
+                DispatchQueue.main.async {
+                    self.enableProxyWithActivationCompletion { self.isRepairing = false }
+                }
+            }
+        }
+    }
+
     /// set provider protocol and description from our bundle id, then save (keeps current isEnabled)
     private func applyCurrentConfigAndSave(completion: @escaping () -> Void) {
         let proto = NEDNSProxyProviderProtocol()
@@ -92,21 +182,42 @@ final class DNSProxyController: ObservableObject {
 
     /// create/save config and enable proxy (call after writing resolved blocklist to app group)
     func enableProxy() {
+        enableProxyWithActivationCompletion(activationCompletion: nil)
+    }
+
+    /// load from system first, then set config and save (recommended before save to avoid permission denied / missing prompt)
+    private func enableProxyWithActivationCompletion(activationCompletion: (() -> Void)?) {
         AppGroupConstants.sharedDefaults?.set(true, forKey: AppGroupConstants.Keys.dnsProxyEnabled)
-        let proto = NEDNSProxyProviderProtocol()
-        proto.providerBundleIdentifier = Self.providerBundleId
-        proto.providerConfiguration = nil
-        manager.localizedDescription = "SwiftSieve DNS"
-        manager.providerProtocol = proto
-        manager.isEnabled = true
-        manager.saveToPreferences { [weak self] error in
-            Task { @MainActor in
-                if let error = error {
-                    self?.statusDescription = "Save error: \(error.localizedDescription)"
+        manager.loadFromPreferences { [weak self] loadError in
+            guard let self = self else { return }
+            DispatchQueue.main.async {
+                if let loadError = loadError {
+                    self.statusDescription = "Load error: \(loadError.localizedDescription)"
                     return
                 }
-                self?.isEnabled = true
-                self?.updateStatusDescription()
+            }
+            let proto = NEDNSProxyProviderProtocol()
+            proto.providerBundleIdentifier = Self.providerBundleId
+            proto.providerConfiguration = nil
+            self.manager.localizedDescription = "SwiftSieve DNS"
+            self.manager.providerProtocol = proto
+            self.manager.isEnabled = true
+            self.manager.saveToPreferences { [weak self] error in
+                guard let self = self else { return }
+                DispatchQueue.main.async {
+                    if let error = error {
+                        let denied = error.localizedDescription.lowercased().contains("permission denied")
+                        self.isSavePermissionDenied = denied
+                        self.statusDescription = denied
+                            ? "Permission denied (TestFlight/App Store)"
+                            : "Save error: \(error.localizedDescription)"
+                        activationCompletion?()
+                        return
+                    }
+                    self.isSavePermissionDenied = false
+                    self.statusDescription = "saved config, waiting for system..."
+                }
+                self.waitForSystemActivation(completion: activationCompletion)
             }
         }
     }

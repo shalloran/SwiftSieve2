@@ -62,12 +62,34 @@ struct HomeView: View {
                         }
                         .disabled(proxy.isRepairing)
                     }
+                    if proxy.isSavePermissionDenied {
+                        Text("On TestFlight and the App Store, iOS blocks adding the DNS proxy from the app. To use the proxy, build and run from Xcode on your device, or see swiftsieve.com for other options.")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                    if proxy.activationFailed && !proxy.isSavePermissionDenied {
+                        Text("The system didn't enable the DNS proxy. Resetting and saving again may show the permission prompt.")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        Button {
+                            proxy.resetAndRetryActivation()
+                        } label: {
+                            HStack {
+                                if proxy.isRepairing {
+                                    Text("Resetting…")
+                                } else {
+                                    Text("Reset and try again")
+                                }
+                            }
+                        }
+                        .disabled(proxy.isRepairing)
+                    }
                 } header: {
                     Text("Status")
                 }
 
                 Section {
-                    ForEach(DefaultBlockLists.all) { list in
+                    ForEach(DefaultBlockLists.domainTogglableLists) { list in
                         DisclosureGroup(
                             isExpanded: Binding(
                                 get: { expandedListId == list.id },
@@ -92,6 +114,23 @@ struct HomeView: View {
                     Text("Block lists")
                 } footer: {
                     Text("Expand a list to include or exclude individual domains. Off = domain not blocked even when list is on.")
+                }
+
+                Section {
+                    ForEach(DefaultBlockLists.uBlockLists) { list in
+                        HStack {
+                            Text(list.name)
+                            Spacer()
+                            Toggle("", isOn: bindingForList(id: list.id))
+                                .labelsHidden()
+                        }
+                    }
+                } header: {
+                    Text("uBlock lists")
+                } footer: {
+                    Text("ublock-derived lists; domains within each list are always on when the list is enabled.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
                 }
 
                 Section {
@@ -127,6 +166,7 @@ struct HomeView: View {
             .navigationTitle("SwiftSieve DNS")
             .onAppear {
                 storage = BlockListStorage()
+                storage.seedDefaultAllowlistIfNeeded()
                 seedDefaultBlockListsIfNeeded()
                 refreshBlockListEmpty()
                 DNSProxyController.shared.loadPreferences()

@@ -17,6 +17,8 @@ enum AppGroupConstants {
         static let customBlockedDomains = "custom_blocked_domains"
         /// app writes merged block list here so extension can read it
         static let resolvedBlockedDomains = "resolved_blocked_domains"
+        /// app writes merged block hashes here for memory-efficient lookup
+        static let resolvedBlockedDomainHashes = "resolved_blocked_domain_hashes"
         /// extension appends "timestamp,domain"; app reads for block log
         static let blockLogEntries = "block_log_entries"
     }

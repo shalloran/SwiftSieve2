@@ -13,6 +13,14 @@ struct BlockListStorage {
         self.defaults = defaults
     }
 
+    /// default domains that start on the allowlist
+    static let defaultAllowlistDomains: Set<String> = [
+        "apple.com",
+        "icloud.com",
+        "kagi.com",
+        "teams.microsoft.com",
+    ]
+
     var allowlist: Set<String> {
         get {
             guard let defaults, let arr = defaults.array(forKey: AppGroupConstants.Keys.allowlistedDomains) as? [String] else {
@@ -35,6 +43,11 @@ struct BlockListStorage {
         var w = allowlist
         w.remove(domain.lowercased())
         allowlist = w
+    }
+
+    mutating func seedDefaultAllowlistIfNeeded() {
+        guard allowlist.isEmpty else { return }
+        allowlist = Self.defaultAllowlistDomains
     }
 
     var customBlockedDomains: Set<String> {
@@ -108,6 +121,28 @@ struct BlockListStorage {
         writeResolvedBlockedDomains()
     }
 
+    private func hashDomain(_ s: String) -> UInt64 {
+        var hash: UInt64 = 0xcbf29ce484222325
+        let prime: UInt64 = 0x100000001b3
+        for b in s.utf8 {
+            hash ^= UInt64(b)
+            hash &*= prime
+        }
+        return hash
+    }
+
+    private func writeHashes(_ all: Set<String>, defaults: UserDefaults) {
+        var data = Data()
+        data.reserveCapacity(all.count * MemoryLayout<UInt64>.size)
+        for d in all {
+            var h = hashDomain(d)
+            h = h.littleEndian
+            withUnsafeBytes(of: &h) { data.append(contentsOf: $0) }
+        }
+        defaults.set(data, forKey: AppGroupConstants.Keys.resolvedBlockedDomainHashes)
+        defaults.removeObject(forKey: AppGroupConstants.Keys.resolvedBlockedDomains)
+    }
+
     /// write merged blocklist to app group so extension can read it (async, for list changes)
     func writeResolvedBlockedDomains() {
         let def = defaults
@@ -115,7 +150,7 @@ struct BlockListStorage {
             guard let defaults = def else { return }
             let storage = BlockListStorage(defaults: defaults)
             let all = storage.getAllBlockedDomains()
-            defaults.set(Array(all), forKey: AppGroupConstants.Keys.resolvedBlockedDomains)
+            storage.writeHashes(all, defaults: defaults)
         }
     }
 
@@ -124,7 +159,10 @@ struct BlockListStorage {
         let def = defaults
         let all = getAllBlockedDomains()
         queue.async {
-            def?.set(Array(all), forKey: AppGroupConstants.Keys.resolvedBlockedDomains)
+            if let defaults = def {
+                let storage = BlockListStorage(defaults: defaults)
+                storage.writeHashes(all, defaults: defaults)
+            }
             DispatchQueue.main.async { mainCompletion() }
         }
     }

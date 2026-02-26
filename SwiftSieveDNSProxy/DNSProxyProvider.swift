@@ -9,7 +9,7 @@ import os.log
 class DNSProxyProvider: NEDNSProxyProvider {
 
     private let log = OSLog(subsystem: "topiaria.llc.SwiftSieveDNS.SwiftSieveDNSProxy", category: "DNSProxy")
-    private var blockedDomains: Set<String> = []
+    private var blockedDomainHashes: Set<UInt64> = []
     private var allowlist: Set<String> = []
     private let doh = DoHClient()
 
@@ -27,12 +27,43 @@ class DNSProxyProvider: NEDNSProxyProvider {
         return true
     }
 
+    private func hashDomain(_ s: String) -> UInt64 {
+        var hash: UInt64 = 0xcbf29ce484222325
+        let prime: UInt64 = 0x100000001b3
+        for b in s.utf8 {
+            hash ^= UInt64(b)
+            hash &*= prime
+        }
+        return hash
+    }
+
+    private func decodeHashes(from data: Data) -> Set<UInt64> {
+        var out: Set<UInt64> = []
+        let count = data.count / MemoryLayout<UInt64>.size
+        data.withUnsafeBytes { raw in
+            let buf = raw.bindMemory(to: UInt64.self)
+            guard let base = buf.baseAddress else { return }
+            for i in 0..<count {
+                let v = UInt64(littleEndian: base[i])
+                out.insert(v)
+            }
+        }
+        return out
+    }
+
     private func loadBlocklistFromAppGroup() {
         let defaults = UserDefaults(suiteName: "group.topiaria.llc.SwiftSieveDNS")
-        if let arr = defaults?.array(forKey: "resolved_blocked_domains") as? [String] {
-            blockedDomains = Set(arr.map { $0.lowercased() })
+        if let data = defaults?.data(forKey: "resolved_blocked_domain_hashes") {
+            blockedDomainHashes = decodeHashes(from: data)
+        } else if let arr = defaults?.array(forKey: "resolved_blocked_domains") as? [String] {
+            let set = Set(arr.map { $0.lowercased() })
+            var hashes: Set<UInt64> = []
+            for d in set {
+                hashes.insert(hashDomain(d))
+            }
+            blockedDomainHashes = hashes
         } else {
-            blockedDomains = []
+            blockedDomainHashes = []
         }
         if let arr = defaults?.array(forKey: "allowlisted_domains") as? [String] {
             allowlist = Set(arr.map { $0.lowercased() })
@@ -43,11 +74,12 @@ class DNSProxyProvider: NEDNSProxyProvider {
 
     private func isBlocked(_ queryName: String) -> Bool {
         if allowlist.contains(queryName) { return false }
-        if blockedDomains.contains(queryName) { return true }
         var check = queryName
-        while let dot = check.firstIndex(of: ".") {
+        while true {
+            let h = hashDomain(check)
+            if blockedDomainHashes.contains(h) { return true }
+            guard let dot = check.firstIndex(of: ".") else { break }
             check = String(check[check.index(after: dot)...])
-            if blockedDomains.contains(check) { return true }
         }
         return false
     }
@@ -95,7 +127,6 @@ class DNSProxyProvider: NEDNSProxyProvider {
             if let ep = remoteEndpoint { flow.writeDatagrams([data], sentBy: [ep]) { _ in } }
             return
         }
-        loadBlocklistFromAppGroup()
         if isBlocked(msg.queryName) {
             appendBlockLog(domain: msg.queryName)
             let response = msg.buildNXDOMAINResponse()

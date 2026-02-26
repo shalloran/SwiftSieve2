@@ -55,6 +55,7 @@ struct AllowlistView: View {
             .navigationViewStyle(.stack)
             .onAppear {
                 storage = BlockListStorage()
+                storage.seedDefaultAllowlistIfNeeded()
             }
         }
     }
